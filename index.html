@@ -11,12 +11,12 @@
   :root{
     --bg:#f2f2f7; --card:#ffffff; --text:#1c1c1e; --sub:#8a8a8e;
     --blue:#007aff; --green:#34c759; --red:#ff3b30; --orange:#ff9500; --purple:#af52de;
-    --line:#e5e5ea; --line2:#f0f0f2;
+    --line:#e5e5ea; --line2:#f0f0f2; --input-bg:#fbfbfd; --seg-bg:#e5e5ea; --seg-active:#ffffff;
   }
   body[data-theme="dark"]{
     --bg:#000000; --card:#1c1c1e; --text:#f2f2f7; --sub:#98989d;
     --blue:#0a84ff; --green:#30d158; --red:#ff453a; --orange:#ff9f0a; --purple:#bf5af2;
-    --line:#38383a; --line2:#2c2c2e;
+    --line:#38383a; --line2:#2c2c2e; --input-bg:#1c1c1e; --seg-bg:#1c1c1e; --seg-active:#3a3a3c;
   }
   body{transition:background .2s,color .2s;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -25,9 +25,9 @@
   #app,#auth{max-width:520px;margin:0 auto;padding:20px 16px 70px;}
   h1{font-size:30px;font-weight:700;letter-spacing:-0.02em;margin:6px 0 2px;}
   .sub{color:var(--sub);font-size:14px;margin:0 0 20px;}
-  .segmented{display:flex;background:#e5e5ea;border-radius:10px;padding:3px;margin-bottom:20px;position:sticky;top:10px;z-index:5;}
+  .segmented{display:flex;background:var(--seg-bg);border-radius:10px;padding:3px;margin-bottom:20px;position:sticky;top:10px;z-index:5;}
   .seg{flex:1;text-align:center;padding:8px 4px;font-size:13px;font-weight:600;color:var(--sub);border-radius:8px;cursor:pointer;transition:all .15s;}
-  .seg.active{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  .seg.active{background:var(--seg-active);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12);}
   .panel{display:none;} .panel.active{display:block;animation:fadein .2s ease;}
   @keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
   .card{background:var(--card);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
@@ -35,7 +35,7 @@
   label{display:block;font-size:13px;font-weight:500;color:var(--sub);margin:14px 0 6px;}
   label:first-of-type{margin-top:0;}
   input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;
-    background:#fbfbfd;font-size:15px;color:var(--text);font-family:inherit;appearance:none;-webkit-appearance:none;}
+    background:var(--input-bg);font-size:15px;color:var(--text);font-family:inherit;appearance:none;-webkit-appearance:none;}
   select{background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6"><path d="M0 0l5 6 5-6z" fill="%238a8a8e"/></svg>');background-repeat:no-repeat;background-position:right 12px center;padding-right:30px;}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,122,255,.15);}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
@@ -55,7 +55,7 @@
   .amt{font-weight:600;font-size:14.5px;white-space:nowrap;flex-shrink:0;margin-left:8px;}
   .amt.neg{color:var(--text);}
   .amt.pos{color:var(--green);}
-  .droparea{border:1.5px dashed var(--line);border-radius:14px;padding:34px 16px;text-align:center;color:var(--sub);cursor:pointer;font-size:14px;background:#fbfbfd;}
+  .droparea{border:1.5px dashed var(--line);border-radius:14px;padding:34px 16px;text-align:center;color:var(--sub);cursor:pointer;font-size:14px;background:var(--input-bg);}
   .droparea i{font-size:26px;display:block;margin-bottom:10px;color:var(--blue);}
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
   th{text-align:left;font-size:10.5px;text-transform:uppercase;color:var(--sub);padding:5px 3px;border-bottom:1px solid var(--line);font-weight:600;}
@@ -170,7 +170,7 @@
             <option value="">Choose account</option>
             <option>Alfalah Bank Limited</option>
             <option>UBL Bank Limited</option>
-            <option>Easypaisa Bank Limited</option>
+            <option>Easy Pesa Bank Limited</option>
             <option>Sada Pay Bank</option>
             <option value="__other__">Other…</option>
           </select>
@@ -243,7 +243,7 @@ let accounts = {};
 let pendingParsed = [];
 let profile = {avatar_url: null, theme: 'light'};
 function currentMonthKey(){ return new Date().toISOString().slice(0,7); }
-const KNOWN_BANKS = ['Alfalah Bank Limited','UBL Bank Limited','Easypaisa Bank Limited','Sada Pay Bank'];
+const KNOWN_BANKS = ['Alfalah Bank Limited','UBL Bank Limited','Easy Pesa Bank Limited','Sada Pay Bank'];
 
 const CAT_COLOR = {
   Groceries:'#34c759', Utilities:'#ff9500', Rent:'#af52de', Transport:'#007aff',
@@ -549,7 +549,7 @@ function renderPreview(){
         <option value="">Choose account</option>
         <option>Alfalah Bank Limited</option>
         <option>UBL Bank Limited</option>
-        <option>Easypaisa Bank Limited</option>
+        <option>Easy Pesa Bank Limited</option>
         <option>Sada Pay Bank</option>
         <option value="__other__">Other…</option>
       </select>
@@ -689,7 +689,7 @@ function renderBudget(){
           </span>
         </div>
         <div class="bar-track"><div class="bar-fill" style="width:${goal>0?pct:0}%;background:${over?'#ff3b30':colorForCategory(cat)}"></div></div>
-        ${over ? `<div class="chip" style="background:#ffebe9;color:#ff3b30">Over budget</div>` : ''}
+        ${over ? `<div class="chip" style="background:var(--line2);color:var(--red)">Over budget</div>` : ''}
       </div>`;
   }).join('');
 
@@ -777,7 +777,7 @@ function renderBudget(){
 
 const BANK_COLORS = {
   'Alfalah Bank Limited': '#a2845e', 'UBL Bank Limited': '#1f4d8c',
-  'Easypaisa Bank Limited': '#00a651', 'Sada Pay Bank': '#5e2ce2'
+  'Easy Pesa Bank Limited': '#00a651', 'Sada Pay Bank': '#5e2ce2'
 };
 function colorForAccount(name){
   if(BANK_COLORS[name]) return BANK_COLORS[name];
