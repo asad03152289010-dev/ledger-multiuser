@@ -282,6 +282,7 @@ async function enterApp(){
 async function checkSession(){
   const { data } = await sb.auth.getSession();
   if(data.session){ await enterApp(); }
+  else{ document.getElementById('auth').style.display = 'block'; }
 }
 
 // ===================== DATA (Supabase) =====================
