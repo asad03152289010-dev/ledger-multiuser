@@ -23,7 +23,6 @@ const REMINDERS = [
 ];
 
 module.exports = async (req, res) => {
-  // Simple shared-secret check so random people can't trigger your sends
   const secret = req.query.secret || (req.headers['x-cron-secret']);
   if (secret !== process.env.CRON_SECRET) {
     return res.status(401).json({ error: 'unauthorized' });
