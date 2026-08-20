@@ -243,7 +243,7 @@ let accounts = {};
 let pendingParsed = [];
 let profile = {avatar_url: null, theme: 'light'};
 function currentMonthKey(){ return new Date().toISOString().slice(0,7); }
-const KNOWN_BANKS = ['Alfalah Bank Limited','UBL Bank Limited','Easy Pesa Bank Limited','Sada Pay Bank'];
+const KNOWN_BANKS = ['Alfalah Bank Limited','UBL Bank Limited','Easypaisa Bank Limited','Sada Pay Bank'];
 
 const CAT_COLOR = {
   Groceries:'#34c759', Utilities:'#ff9500', Rent:'#af52de', Transport:'#007aff',
@@ -549,7 +549,7 @@ function renderPreview(){
         <option value="">Choose account</option>
         <option>Alfalah Bank Limited</option>
         <option>UBL Bank Limited</option>
-        <option>Easy Pesa Bank Limited</option>
+        <option>Easypaisa Bank Limited</option>
         <option>Sada Pay Bank</option>
         <option value="__other__">Other…</option>
       </select>
@@ -777,7 +777,7 @@ function renderBudget(){
 
 const BANK_COLORS = {
   'Alfalah Bank Limited': '#a2845e', 'UBL Bank Limited': '#1f4d8c',
-  'Easy Pesa Bank Limited': '#00a651', 'Sada Pay Bank': '#5e2ce2'
+  'Easypaisa Bank Limited': '#00a651', 'Sada Pay Bank': '#5e2ce2'
 };
 function colorForAccount(name){
   if(BANK_COLORS[name]) return BANK_COLORS[name];
