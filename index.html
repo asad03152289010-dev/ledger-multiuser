@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledger — spending tracker</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#f2f2f7; --card:#ffffff; --text:#1c1c1e; --sub:#8a8a8e;
+    --blue:#007aff; --green:#34c759; --red:#ff3b30; --orange:#ff9500; --purple:#af52de;
+    --line:#e5e5ea; --line2:#f0f0f2;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Helvetica,Arial,sans-serif;}
+  #app,#auth{max-width:520px;margin:0 auto;padding:20px 16px 70px;}
+  h1{font-size:30px;font-weight:700;letter-spacing:-0.02em;margin:6px 0 2px;}
+  .sub{color:var(--sub);font-size:14px;margin:0 0 20px;}
+  .segmented{display:flex;background:#e5e5ea;border-radius:10px;padding:3px;margin-bottom:20px;position:sticky;top:10px;z-index:5;}
+  .seg{flex:1;text-align:center;padding:8px 4px;font-size:13px;font-weight:600;color:var(--sub);border-radius:8px;cursor:pointer;transition:all .15s;}
+  .seg.active{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  .panel{display:none;} .panel.active{display:block;animation:fadein .2s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .card{background:var(--card);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .card h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);margin:0 0 14px;}
+  label{display:block;font-size:13px;font-weight:500;color:var(--sub);margin:14px 0 6px;}
+  label:first-of-type{margin-top:0;}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;
+    background:#fbfbfd;font-size:15px;color:var(--text);font-family:inherit;appearance:none;-webkit-appearance:none;}
+  select{background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6"><path d="M0 0l5 6 5-6z" fill="%238a8a8e"/></svg>');background-repeat:no-repeat;background-position:right 12px center;padding-right:30px;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,122,255,.15);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  button.primary{margin-top:16px;width:100%;padding:13px;background:var(--blue);color:#fff;border:none;border-radius:12px;
+    font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s;}
+  button.primary:active{opacity:.7;}
+  button.linklike{background:none;border:none;color:var(--blue);font-size:13.5px;font-weight:500;cursor:pointer;margin-top:14px;width:100%;text-align:center;font-family:inherit;}
+  .err{color:var(--red);font-size:12px;margin-top:6px;display:none;}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line2);}
+  .row:last-child{border-bottom:none;}
+  .icon-badge{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    font-size:15px;color:#fff;margin-right:11px;flex-shrink:0;}
+  .row-left{display:flex;align-items:center;min-width:0;}
+  .row-text{min-width:0;}
+  .payee{font-weight:590;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .meta{color:var(--sub);font-size:12px;margin-top:1px;}
+  .amt{font-weight:600;font-size:14.5px;white-space:nowrap;flex-shrink:0;margin-left:8px;}
+  .amt.neg{color:var(--text);}
+  .amt.pos{color:var(--green);}
+  .droparea{border:1.5px dashed var(--line);border-radius:14px;padding:34px 16px;text-align:center;color:var(--sub);cursor:pointer;font-size:14px;background:#fbfbfd;}
+  .droparea i{font-size:26px;display:block;margin-bottom:10px;color:var(--blue);}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;color:var(--sub);padding:5px 3px;border-bottom:1px solid var(--line);font-weight:600;}
+  td{padding:6px 3px;border-bottom:1px solid var(--line2);vertical-align:middle;}
+  .empty{text-align:center;padding:44px 10px;color:var(--sub);font-size:14px;}
+  .empty i{font-size:32px;display:block;margin-bottom:10px;opacity:.5;}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .stat{background:var(--card);border-radius:16px;padding:14px 16px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .stat .num{font-size:22px;font-weight:700;letter-spacing:-.01em;}
+  .stat .lbl{font-size:12px;color:var(--sub);margin-top:2px;}
+  .bar-row{margin-bottom:14px;}
+  .bar-row:last-child{margin-bottom:0;}
+  .bar-row .top{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px;}
+  .bar-track{height:7px;background:var(--line2);border-radius:4px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:4px;}
+  .loading{text-align:center;padding:20px;color:var(--sub);font-size:13.5px;}
+  select.cat{font-size:12px;padding:5px 22px 5px 6px;background-position:right 6px center;}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(28,28,30,.92);
+    color:#fff;padding:10px 18px;border-radius:20px;font-size:13.5px;font-weight:500;opacity:0;
+    transition:opacity .25s;pointer-events:none;backdrop-filter:blur(6px);}
+  .toast.show{opacity:1;}
+  .chip{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;margin-top:3px;}
+  .del-btn{background:none;border:none;color:var(--sub);font-size:16px;padding:4px 2px 4px 10px;cursor:pointer;flex-shrink:0;}
+  .del-btn:active{color:var(--red);}
+  .dash{background:var(--card);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .dash .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
+  .dash .head .lbl{font-size:13px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .dash .big{font-size:26px;font-weight:700;letter-spacing:-.01em;margin:2px 0 10px;}
+  .dash .big.warn{color:var(--red);}
+  .acct-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line2);}
+  .acct-row:last-child{border-bottom:none;}
+  .acct-name{font-size:13.5px;font-weight:590;}
+  .acct-sub{font-size:11.5px;color:var(--sub);margin-top:1px;}
+  .acct-amt{font-size:13.5px;font-weight:600;text-align:right;}
+  .acct-amt.low{color:var(--red);}
+  .bell-btn{position:fixed;bottom:24px;right:18px;width:46px;height:46px;border-radius:23px;
+    background:var(--blue);color:#fff;border:none;display:flex;align-items:center;justify-content:center;
+    font-size:19px;box-shadow:0 4px 12px rgba(0,122,255,.35);cursor:pointer;z-index:40;}
+  .bell-btn.subscribed{background:var(--green);}
+  .link{color:var(--blue);font-size:13px;font-weight:500;cursor:pointer;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+  .signout{font-size:13px;color:var(--sub);cursor:pointer;}
+  #auth{display:none;}
+  #app{display:none;}
+</style>
+</head>
+<body>
+
+<div id="auth">
+  <h1>Ledger</h1>
+  <p class="sub">Sign in to track your own spending, privately.</p>
+  <div class="card">
+    <h3 id="auth-title">Sign in</h3>
+    <label style="margin-top:0">Email</label>
+    <input type="email" id="auth-email" placeholder="you@example.com">
+    <label>Password</label>
+    <input type="password" id="auth-password" placeholder="At least 6 characters">
+    <div class="err" id="auth-err"></div>
+    <button class="primary" id="auth-submit">Sign in</button>
+    <button class="linklike" id="auth-toggle">Don't have an account? Sign up</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <h1>Ledger</h1>
+    <span class="signout" id="signout-btn">Sign out</span>
+  </div>
+  <p class="sub">Every rupee, tracked — log it by hand or drop in a statement.</p>
+
+  <div class="segmented">
+    <div class="seg active" data-tab="log">Log</div>
+    <div class="seg" data-tab="statement">Statement</div>
+    <div class="seg" data-tab="summary">Summary</div>
+    <div class="seg" data-tab="budget">Budget</div>
+  </div>
+
+  <div class="panel active" id="panel-log">
+    <div id="dashboard-wrap"></div>
+    <div class="card">
+      <h3>New payment</h3>
+      <label>Date</label>
+      <input type="date" id="f-date">
+      <div class="row2">
+        <div>
+          <label>Amount (PKR)</label>
+          <input type="number" step="1" id="f-amount" placeholder="0">
+        </div>
+        <div>
+          <label>Paid from</label>
+          <select id="f-source">
+            <option value="">Choose account</option>
+            <option>Alfalah Bank Limited</option>
+            <option>UBL Bank Limited</option>
+            <option>Easy Pesa Bank Limited</option>
+            <option>Sada Pay Bank</option>
+            <option value="__other__">Other…</option>
+          </select>
+          <input type="text" id="f-source-other" placeholder="Account name" style="display:none;margin-top:8px;">
+        </div>
+      </div>
+      <label>Paid to</label>
+      <input type="text" id="f-payee" placeholder="e.g. K-Electric">
+      <label>Category</label>
+      <select id="f-category">
+        <option>Groceries</option><option>Utilities</option><option>Rent</option>
+        <option>Transport</option><option>Dining</option><option>Shopping</option>
+        <option>Health</option><option>Entertainment</option><option>Transfers</option>
+        <option>Other</option>
+      </select>
+      <label>Note (optional)</label>
+      <input type="text" id="f-note" placeholder="Anything worth remembering">
+      <div class="err" id="f-err"></div>
+      <button class="primary" id="f-save">Save entry</button>
+    </div>
+    <div class="card" id="log-list"></div>
+  </div>
+
+  <div class="panel" id="panel-statement">
+    <div class="card">
+      <h3>Upload statement</h3>
+      <div class="droparea" id="drop">
+        <i class="ti ti-file-upload"></i>
+        Drop a bank statement PDF here, or tap to choose one.
+        <input type="file" accept="application/pdf" id="file-input" style="display:none;">
+      </div>
+      <div id="parse-status"></div>
+    </div>
+    <div id="preview-wrap"></div>
+  </div>
+
+  <div class="panel" id="panel-summary">
+    <div id="summary-wrap"></div>
+  </div>
+
+  <div class="panel" id="panel-budget">
+    <div id="budget-wrap"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<button class="bell-btn" id="bell-btn" aria-label="Enable phone notifications" title="Enable phone notifications" style="display:none;"><i class="ti ti-bell"></i></button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// ===== Fill these in with your Supabase project's values =====
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const VAPID_PUBLIC_KEY = 'YOUR_VAPID_PUBLIC_KEY';
+// ================================================================
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let entries = [];
+let budgets = {overall: 0, categories: {}};
+let accounts = {};
+let pendingParsed = [];
+const KNOWN_BANKS = ['Alfalah Bank Limited','UBL Bank Limited','Easy Pesa Bank Limited','Sada Pay Bank'];
+
+const CAT_COLOR = {
+  Groceries:'#34c759', Utilities:'#ff9500', Rent:'#af52de', Transport:'#007aff',
+  Dining:'#ff3b30', Shopping:'#ff2d55', Health:'#5ac8fa', Entertainment:'#ffcc00',
+  Transfers:'#8e8e93', Other:'#a2845e'
+};
+const CAT_ICON = {
+  Groceries:'ti-shopping-cart', Utilities:'ti-bolt', Rent:'ti-home', Transport:'ti-car',
+  Dining:'ti-tools-kitchen-2', Shopping:'ti-bag', Health:'ti-heart', Entertainment:'ti-device-tv',
+  Transfers:'ti-arrows-exchange', Other:'ti-dots'
+};
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function fmt(n){ return 'Rs ' + Math.round(Math.abs(n)).toLocaleString('en-PK'); }
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ===================== AUTH =====================
+let isSignup = false;
+document.getElementById('auth-toggle').addEventListener('click', () => {
+  isSignup = !isSignup;
+  document.getElementById('auth-title').textContent = isSignup ? 'Create account' : 'Sign in';
+  document.getElementById('auth-submit').textContent = isSignup ? 'Sign up' : 'Sign in';
+  document.getElementById('auth-toggle').textContent = isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up";
+});
+
+document.getElementById('auth-submit').addEventListener('click', async () => {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const err = document.getElementById('auth-err');
+  err.style.display = 'none';
+  if(!email || password.length < 6){
+    err.textContent = 'Enter a valid email and a password of at least 6 characters.';
+    err.style.display = 'block';
+    return;
+  }
+  const { error } = isSignup
+    ? await sb.auth.signUp({ email, password })
+    : await sb.auth.signInWithPassword({ email, password });
+  if(error){
+    err.textContent = error.message;
+    err.style.display = 'block';
+    return;
+  }
+  if(isSignup){
+    toast('Account created — check your email if confirmation is required');
+  }
+  await enterApp();
+});
+
+document.getElementById('signout-btn').addEventListener('click', async () => {
+  await sb.auth.signOut();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth').style.display = 'block';
+  document.getElementById('bell-btn').style.display = 'none';
+});
+
+async function enterApp(){
+  document.getElementById('auth').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('bell-btn').style.display = 'flex';
+  await loadAll();
+  setupPushNotifications();
+}
+
+async function checkSession(){
+  const { data } = await sb.auth.getSession();
+  if(data.session){ await enterApp(); }
+}
+
+// ===================== DATA (Supabase) =====================
+async function loadAll(){
+  const [{data: e}, {data: b}, {data: a}] = await Promise.all([
+    sb.from('entries').select('*').order('date', {ascending:false}),
+    sb.from('budgets').select('*').maybeSingle(),
+    sb.from('accounts').select('*')
+  ]);
+  entries = (e || []).map(row => ({
+    id: row.id, date: row.date, amount: Number(row.amount), source: row.source,
+    payee: row.payee, category: row.category, note: row.note, origin: row.origin
+  }));
+  budgets = b ? { overall: Number(b.overall)||0, categories: b.categories || {} } : { overall: 0, categories: {} };
+  accounts = {};
+  (a || []).forEach(row => { accounts[row.name] = Number(row.balance); });
+  renderLog(); renderSummary(); renderBudget(); renderDashboard();
+}
+
+async function addEntry(entry){
+  const { data: userData } = await sb.auth.getUser();
+  const { error } = await sb.from('entries').insert({ ...entry, user_id: userData.user.id });
+  if(error){ toast('Could not save'); return false; }
+  return true;
+}
+async function deleteEntry(id){
+  await sb.from('entries').delete().eq('id', id);
+  entries = entries.filter(e => e.id !== id);
+  renderLog(); renderSummary(); renderBudget(); renderDashboard();
+  toast('Entry deleted');
+}
+async function saveBudgetsToDb(){
+  const { data: userData } = await sb.auth.getUser();
+  await sb.from('budgets').upsert({ user_id: userData.user.id, overall: budgets.overall, categories: budgets.categories });
+}
+async function saveAccountToDb(name, balance){
+  const { data: userData } = await sb.auth.getUser();
+  await sb.from('accounts').upsert({ user_id: userData.user.id, name, balance });
+}
+
+// ===================== RENDER: LOG =====================
+function renderLog(){
+  const wrap = document.getElementById('log-list');
+  if(entries.length === 0){
+    wrap.innerHTML = `<div class="empty"><i class="ti ti-receipt-2"></i>No entries yet. Log your first payment above.</div>`;
+    return;
+  }
+  const sorted = [...entries].sort((a,b)=> b.date.localeCompare(a.date));
+  wrap.innerHTML = sorted.map(e => `
+    <div class="row">
+      <div class="row-left">
+        <div class="icon-badge" style="background:${CAT_COLOR[e.category]||'#8e8e93'}"><i class="ti ${CAT_ICON[e.category]||'ti-dots'}"></i></div>
+        <div class="row-text">
+          <div class="payee">${escapeHtml(e.payee || 'Unlabeled')}</div>
+          <div class="meta">${e.date} · ${escapeHtml(e.source || '—')}</div>
+        </div>
+      </div>
+      <div class="amt ${e.amount<0?'neg':'pos'}">${e.amount<0?'-':'+'}${fmt(e.amount)}</div>
+      <button class="del-btn" data-id="${e.id}" aria-label="Delete entry"><i class="ti ti-trash"></i></button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteEntry(btn.dataset.id));
+  });
+}
+
+document.getElementById('f-source').addEventListener('change', e => {
+  document.getElementById('f-source-other').style.display = e.target.value === '__other__' ? 'block' : 'none';
+});
+
+document.getElementById('f-save').addEventListener('click', async () => {
+  const date = document.getElementById('f-date').value;
+  const amountRaw = parseFloat(document.getElementById('f-amount').value);
+  let source = document.getElementById('f-source').value;
+  if(source === '__other__') source = document.getElementById('f-source-other').value.trim();
+  const payee = document.getElementById('f-payee').value.trim();
+  const category = document.getElementById('f-category').value;
+  const note = document.getElementById('f-note').value.trim();
+  const err = document.getElementById('f-err');
+
+  if(!date || isNaN(amountRaw) || !source || !payee){
+    err.textContent = 'Fill in date, amount, account and payee first.';
+    err.style.display = 'block';
+    return;
+  }
+  err.style.display = 'none';
+  const amount = -Math.abs(amountRaw);
+
+  const ok = await addEntry({ date, amount, source, payee, category, note, origin: 'manual' });
+  if(ok){
+    await loadAll();
+    ['f-amount','f-payee','f-note'].forEach(id => document.getElementById(id).value = '');
+    toast('Entry saved');
+  }
+});
+
+document.querySelectorAll('.seg').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.seg').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-'+tab.dataset.tab).classList.add('active');
+    if(tab.dataset.tab === 'summary') renderSummary();
+    if(tab.dataset.tab === 'budget') renderBudget();
+  });
+});
+
+// ===================== STATEMENT UPLOAD =====================
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file-input');
+drop.addEventListener('click', ()=> fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.borderColor = 'var(--blue)'; });
+drop.addEventListener('dragleave', () => { drop.style.borderColor = 'var(--line)'; });
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.style.borderColor = 'var(--line)';
+  if(e.dataTransfer.files[0]) handlePdf(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if(e.target.files[0]) handlePdf(e.target.files[0]); });
+
+async function handlePdf(file){
+  const status = document.getElementById('parse-status');
+  status.innerHTML = '<div class="loading">Reading statement…</div>';
+  document.getElementById('preview-wrap').innerHTML = '';
+  try{
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    let lines = [];
+    for(let p=1; p<=pdf.numPages; p++){
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const rowMap = {};
+      content.items.forEach(item => {
+        const y = Math.round(item.transform[5]);
+        rowMap[y] = (rowMap[y] || '') + item.str + ' ';
+      });
+      const rowYs = Object.keys(rowMap).map(Number).sort((a,b)=>b-a);
+      rowYs.forEach(y => lines.push(rowMap[y].trim()));
+    }
+    const parsed = parseStatementLines(lines);
+    status.innerHTML = parsed.length
+      ? `<div class="loading">Found ${parsed.length} possible transactions. Review below before adding.</div>`
+      : `<div class="loading">Couldn't confidently detect transaction lines. You can still log entries manually.</div>`;
+    pendingParsed = parsed;
+    renderPreview();
+  }catch(e){
+    status.innerHTML = `<div class="loading">Could not read that PDF. Try a different export or log manually.</div>`;
+  }
+}
+
+function parseStatementLines(lines){
+  const dateRe = /\b(\d{1,2}[\/\-. ](?:[A-Za-z]{3}|\d{1,2})[\/\-. ]\d{2,4}|[A-Za-z]{3}\s+\d{1,2},?\s+\d{2,4})\b/;
+  const amtRe = /(-?(?:Rs\.?|PKR)?\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(CR|DR)?\s*$/i;
+  const out = [];
+  lines.forEach(line => {
+    const dm = line.match(dateRe);
+    const am = line.match(amtRe);
+    if(!dm || !am) return;
+    let amount = parseFloat(am[1].replace(/[Rs.PKR,\s]/gi,''));
+    if(isNaN(amount)) return;
+    if(am[2] && am[2].toUpperCase() === 'CR') amount = Math.abs(amount);
+    else if(!/^-/.test(am[1].trim())) amount = -Math.abs(amount);
+    let desc = line.replace(dm[0],'').replace(am[0],'').trim();
+    desc = desc.replace(/\s{2,}/g,' ').slice(0,80);
+    if(!desc) return;
+    out.push({date: dm[0], desc, amount});
+  });
+  return out.slice(0, 200);
+}
+
+function renderPreview(){
+  const wrap = document.getElementById('preview-wrap');
+  if(pendingParsed.length === 0){ wrap.innerHTML=''; return; }
+  const cats = Object.keys(CAT_COLOR);
+  wrap.innerHTML = `
+    <div class="card">
+      <h3>Review</h3>
+      <label style="margin-top:0">Which account is this statement for?</label>
+      <select id="stmt-source">
+        <option value="">Choose account</option>
+        <option>Alfalah Bank Limited</option>
+        <option>UBL Bank Limited</option>
+        <option>Easy Pesa Bank Limited</option>
+        <option>Sada Pay Bank</option>
+        <option value="__other__">Other…</option>
+      </select>
+      <input type="text" id="stmt-source-other" placeholder="Account name" style="display:none;margin-top:8px;">
+      <table style="margin-top:14px;">
+        <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Category</th></tr></thead>
+        <tbody>
+          ${pendingParsed.map((t,i)=>`
+            <tr>
+              <td>${escapeHtml(t.date)}</td>
+              <td>${escapeHtml(t.desc)}</td>
+              <td class="amt ${t.amount<0?'neg':'pos'}">${t.amount<0?'-':'+'}${fmt(t.amount)}</td>
+              <td><select class="cat" data-i="${i}">${cats.map(c=>`<option ${c==='Other'?'selected':''}>${c}</option>`).join('')}</select></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="err" id="stmt-err"></div>
+      <button class="primary" id="stmt-add">Add ${pendingParsed.length} transactions</button>
+    </div>
+  `;
+  document.getElementById('stmt-source').addEventListener('change', e => {
+    document.getElementById('stmt-source-other').style.display = e.target.value === '__other__' ? 'block' : 'none';
+  });
+  document.getElementById('stmt-add').addEventListener('click', async () => {
+    let source = document.getElementById('stmt-source').value;
+    if(source === '__other__') source = document.getElementById('stmt-source-other').value.trim();
+    const err = document.getElementById('stmt-err');
+    if(!source){ err.textContent = 'Choose or name the account this statement belongs to.'; err.style.display='block'; return; }
+    err.style.display = 'none';
+    document.querySelectorAll('.cat').forEach(sel => {
+      const i = +sel.dataset.i;
+      pendingParsed[i].category = sel.value;
+    });
+    const { data: userData } = await sb.auth.getUser();
+    const rows = pendingParsed.map(t => ({
+      date: t.date, amount: t.amount, source, payee: t.desc,
+      category: t.category, note: '', origin: 'statement', user_id: userData.user.id
+    }));
+    await sb.from('entries').insert(rows);
+    toast(`${pendingParsed.length} transactions added`);
+    pendingParsed = [];
+    document.getElementById('preview-wrap').innerHTML = '';
+    document.getElementById('parse-status').innerHTML = '';
+    document.getElementById('file-input').value = '';
+    await loadAll();
+  });
+}
+
+// ===================== SUMMARY / BUDGET / DASHBOARD =====================
+function monthKey(dateStr){
+  const d = new Date(dateStr);
+  if(isNaN(d)) return 'Unknown';
+  return d.toLocaleString('en-US',{month:'short', year:'numeric'});
+}
+
+function renderSummary(){
+  const wrap = document.getElementById('summary-wrap');
+  if(entries.length === 0){
+    wrap.innerHTML = `<div class="empty"><i class="ti ti-chart-bar"></i>Nothing to summarize yet.</div>`;
+    return;
+  }
+  const spend = entries.filter(e=>e.amount < 0);
+  const totalSpend = spend.reduce((s,e)=>s+Math.abs(e.amount),0);
+  const now = new Date();
+  const thisMonthKey = now.toLocaleString('en-US',{month:'short',year:'numeric'});
+  const thisMonthSpend = spend.filter(e => monthKey(e.date) === thisMonthKey).reduce((s,e)=>s+Math.abs(e.amount),0);
+  const today = now.toISOString().slice(0,10);
+  const todaySpend = spend.filter(e => e.date === today).reduce((s,e)=>s+Math.abs(e.amount),0);
+
+  const byCat = {};
+  spend.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + Math.abs(e.amount); });
+  const bySource = {};
+  spend.forEach(e => { bySource[e.source] = (bySource[e.source]||0) + Math.abs(e.amount); });
+  const maxCat = Math.max(...Object.values(byCat), 1);
+
+  const byMonth = {};
+  spend.forEach(e => { const k = monthKey(e.date); byMonth[k] = (byMonth[k]||0) + Math.abs(e.amount); });
+  const monthEntries = Object.entries(byMonth).sort((a,b)=> new Date('1 '+a[0]) - new Date('1 '+b[0])).slice(-6);
+  const maxMonth = Math.max(...monthEntries.map(m=>m[1]), 1);
+
+  const catRows = Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+    <div class="bar-row">
+      <div class="top"><span>${escapeHtml(cat)}</span><span class="amt">${fmt(amt)}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(amt/maxCat*100).toFixed(0)}%;background:${CAT_COLOR[cat]||'#8e8e93'}"></div></div>
+    </div>`).join('');
+  const sourceRows = Object.entries(bySource).sort((a,b)=>b[1]-a[1]).map(([src,amt])=>`
+    <tr><td>${escapeHtml(src)}</td><td style="text-align:right" class="amt">${fmt(amt)}</td></tr>`).join('');
+  const monthBars = monthEntries.map(([m,amt])=>`
+    <div class="bar-row">
+      <div class="top"><span>${m}</span><span class="amt">${fmt(amt)}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(amt/maxMonth*100).toFixed(0)}%;background:var(--blue)"></div></div>
+    </div>`).join('');
+
+  wrap.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${fmt(todaySpend)}</div><div class="lbl">Spent today</div></div>
+      <div class="stat"><div class="num">${fmt(thisMonthSpend)}</div><div class="lbl">Spent this month</div></div>
+      <div class="stat"><div class="num">${fmt(totalSpend)}</div><div class="lbl">Total spent</div></div>
+      <div class="stat"><div class="num">${entries.length}</div><div class="lbl">Entries logged</div></div>
+    </div>
+    <div class="card"><h3>Last 6 months</h3>${monthBars}</div>
+    <div class="card"><h3>By category</h3>${catRows}</div>
+    <div class="card"><h3>By account</h3><table><tbody>${sourceRows}</tbody></table></div>
+  `;
+}
+
+function renderBudget(){
+  const wrap = document.getElementById('budget-wrap');
+  const cats = Object.keys(CAT_COLOR);
+  const now = new Date();
+  const thisMonthKey = now.toLocaleString('en-US',{month:'short',year:'numeric'});
+  const spentByCat = {};
+  let totalSpentThisMonth = 0;
+  entries.filter(e=>e.amount<0 && monthKey(e.date)===thisMonthKey).forEach(e=>{
+    spentByCat[e.category] = (spentByCat[e.category]||0) + Math.abs(e.amount);
+    totalSpentThisMonth += Math.abs(e.amount);
+  });
+
+  const overall = budgets.overall || 0;
+  const overallPct = overall > 0 ? Math.min(100, totalSpentThisMonth/overall*100) : 0;
+  const overallOver = overall > 0 && totalSpentThisMonth > overall;
+  const remaining = overall - totalSpentThisMonth;
+  const catBudgetSum = Object.values(budgets.categories||{}).reduce((s,v)=>s+v,0);
+
+  const rows = cats.map(cat => {
+    const goal = (budgets.categories||{})[cat] || 0;
+    const spent = spentByCat[cat] || 0;
+    const pct = goal > 0 ? Math.min(100, (spent/goal*100)) : 0;
+    const over = goal > 0 && spent > goal;
+    return `
+      <div class="bar-row">
+        <div class="top">
+          <span><i class="ti ${CAT_ICON[cat]}" style="margin-right:6px;color:${CAT_COLOR[cat]}"></i>${cat}</span>
+          <span class="amt">${fmt(spent)} ${goal>0 ? '/ '+fmt(goal) : ''}</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${goal>0?pct:0}%;background:${over?'#ff3b30':CAT_COLOR[cat]}"></div></div>
+        ${over ? `<div class="chip" style="background:#ffebe9;color:#ff3b30">Over budget</div>` : ''}
+      </div>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="card">
+      <h3>This month's overall budget</h3>
+      <label style="margin-top:0">Total limit for ${thisMonthKey} (PKR)</label>
+      <input type="number" id="ob-amount" placeholder="e.g. 80000" value="${overall || ''}">
+      <button class="primary" id="ob-save">Save overall budget</button>
+      ${overall > 0 ? `
+        <div style="margin-top:16px;">
+          <div class="top" style="display:flex;justify-content:space-between;font-size:13.5px;">
+            <span>Spent ${fmt(totalSpentThisMonth)}</span>
+            <span style="color:${remaining<0?'var(--red)':'var(--sub)'}">${remaining<0?'Over by '+fmt(remaining):'Left '+fmt(remaining)}</span>
+          </div>
+          <div class="bar-track" style="margin-top:6px;"><div class="bar-fill" style="width:${overallPct}%;background:${overallOver?'#ff3b30':'#34c759'}"></div></div>
+        </div>` : ''}
+    </div>
+    <div class="card">
+      <h3>Split by category <span style="text-transform:none;font-weight:400;">(optional)</span></h3>
+      <p class="acct-sub" style="margin-bottom:12px;">Decide for yourself how much of your overall budget goes where.</p>
+      <div class="row2">
+        <div>
+          <label style="margin-top:0">Category</label>
+          <select id="b-cat">${cats.map(c=>`<option>${c}</option>`).join('')}</select>
+        </div>
+        <div>
+          <label style="margin-top:0">Amount (PKR)</label>
+          <input type="number" id="b-amount" placeholder="e.g. 20000">
+        </div>
+      </div>
+      <button class="primary" id="b-save">Save category split</button>
+      ${overall > 0 && catBudgetSum > 0 ? `<p class="acct-sub" style="margin-top:10px;${catBudgetSum>overall?'color:var(--red)':''}">Allocated so far: ${fmt(catBudgetSum)} of ${fmt(overall)}${catBudgetSum>overall?' — more than your overall budget':''}</p>` : ''}
+    </div>
+    <div class="card">
+      <h3>This month — ${thisMonthKey}</h3>
+      ${rows || '<p class="acct-sub">No category limits set yet.</p>'}
+    </div>
+  `;
+  document.getElementById('ob-save').addEventListener('click', async () => {
+    const amt = parseFloat(document.getElementById('ob-amount').value);
+    if(isNaN(amt) || amt <= 0){ toast('Enter a valid amount'); return; }
+    budgets.overall = amt;
+    await saveBudgetsToDb();
+    toast('Overall budget saved');
+    renderBudget(); renderDashboard();
+  });
+  document.getElementById('b-save').addEventListener('click', async () => {
+    const cat = document.getElementById('b-cat').value;
+    const amt = parseFloat(document.getElementById('b-amount').value);
+    if(isNaN(amt) || amt <= 0){ toast('Enter a valid amount'); return; }
+    budgets.categories = budgets.categories || {};
+    budgets.categories[cat] = amt;
+    await saveBudgetsToDb();
+    toast('Category split saved');
+    renderBudget();
+  });
+}
+
+function renderDashboard(){
+  const wrap = document.getElementById('dashboard-wrap');
+  const now = new Date();
+  const thisMonthKey = now.toLocaleString('en-US',{month:'short',year:'numeric'});
+  const spend = entries.filter(e=>e.amount<0 && monthKey(e.date)===thisMonthKey);
+  const totalSpentThisMonth = spend.reduce((s,e)=>s+Math.abs(e.amount),0);
+  const overall = budgets.overall || 0;
+
+  const allAccountNames = [...new Set([...KNOWN_BANKS, ...Object.keys(accounts), ...entries.map(e=>e.source)])].filter(Boolean);
+  const spentByAcct = {};
+  spend.forEach(e => { spentByAcct[e.source] = (spentByAcct[e.source]||0) + Math.abs(e.amount); });
+
+  let budgetBlock = '';
+  if(overall > 0){
+    const remaining = overall - totalSpentThisMonth;
+    const pct = Math.min(100, totalSpentThisMonth/overall*100);
+    const over = remaining < 0;
+    budgetBlock = `
+      <div class="dash">
+        <div class="head"><span class="lbl">${thisMonthKey} budget</span><span class="lbl">${fmt(overall)}</span></div>
+        <div class="big ${over?'warn':''}">${over ? 'Over by '+fmt(remaining) : fmt(remaining)+' left'}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${over?'#ff3b30':(pct>80?'#ff9500':'#34c759')}"></div></div>
+        <div class="acct-sub" style="margin-top:8px;">Spent ${fmt(totalSpentThisMonth)} of ${fmt(overall)} so far this month.</div>
+      </div>`;
+  } else {
+    budgetBlock = `
+      <div class="dash">
+        <div class="head"><span class="lbl">${thisMonthKey}</span></div>
+        <div class="acct-sub">You haven't set an overall budget yet — spent ${fmt(totalSpentThisMonth)} so far this month. Set a limit in the Budget tab.</div>
+      </div>`;
+  }
+
+  const acctRows = allAccountNames.map(name => {
+    const bal = accounts[name];
+    const spentHere = spentByAcct[name] || 0;
+    const remainingHere = typeof bal === 'number' ? bal - spentHere : null;
+    return `
+      <div class="acct-row">
+        <div>
+          <div class="acct-name">${escapeHtml(name)}</div>
+          <div class="acct-sub">${typeof bal === 'number' ? 'Balance '+fmt(bal) : 'Balance not set'} · spent ${fmt(spentHere)} this month</div>
+        </div>
+        <div class="acct-amt ${remainingHere!==null && remainingHere<0 ? 'low':''}">${remainingHere!==null ? fmt(remainingHere) : '—'}</div>
+      </div>`;
+  }).join('');
+
+  wrap.innerHTML = budgetBlock + `
+    <div class="dash">
+      <div class="head"><span class="lbl">Accounts</span><span class="link" id="acct-manage-link">Set balances</span></div>
+      ${acctRows || '<p class="acct-sub">No accounts used yet.</p>'}
+      <div id="acct-manage" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line2);">
+        <div class="row2">
+          <div>
+            <label style="margin-top:0">Account</label>
+            <select id="acct-select">${allAccountNames.map(n=>`<option>${n}</option>`).join('')}<option value="__other__">Other…</option></select>
+            <input type="text" id="acct-other" placeholder="Account name" style="display:none;margin-top:8px;">
+          </div>
+          <div>
+            <label style="margin-top:0">Current balance (PKR)</label>
+            <input type="number" id="acct-balance" placeholder="e.g. 50000">
+          </div>
+        </div>
+        <button class="primary" id="acct-save">Save balance</button>
+      </div>
+    </div>
+  `;
+
+  const link = document.getElementById('acct-manage-link');
+  const manage = document.getElementById('acct-manage');
+  link.addEventListener('click', () => { manage.style.display = manage.style.display === 'none' ? 'block' : 'none'; });
+  document.getElementById('acct-select').addEventListener('change', e => {
+    document.getElementById('acct-other').style.display = e.target.value === '__other__' ? 'block' : 'none';
+  });
+  document.getElementById('acct-save').addEventListener('click', async () => {
+    let name = document.getElementById('acct-select').value;
+    if(name === '__other__') name = document.getElementById('acct-other').value.trim();
+    const bal = parseFloat(document.getElementById('acct-balance').value);
+    if(!name || isNaN(bal)){ toast('Choose an account and enter a balance'); return; }
+    accounts[name] = bal;
+    await saveAccountToDb(name, bal);
+    toast('Balance saved');
+    renderDashboard();
+  });
+}
+
+// ===================== PUSH NOTIFICATIONS =====================
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function setupPushNotifications(){
+  const bell = document.getElementById('bell-btn');
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    bell.title = 'Push notifications not supported on this browser';
+    return;
+  }
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  const existing = await reg.pushManager.getSubscription();
+  if(existing){ bell.classList.add('subscribed'); }
+
+  bell.onclick = async () => {
+    try{
+      const permission = await Notification.requestPermission();
+      if(permission !== 'granted'){ toast('Notifications blocked — enable from browser settings'); return; }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+      const { data: userData } = await sb.auth.getUser();
+      await sb.from('push_subscriptions').insert({ user_id: userData.user.id, subscription: sub.toJSON() });
+      toast('Notifications on — reminders will now reach your phone directly');
+      bell.classList.add('subscribed');
+    }catch(e){
+      toast('Could not enable notifications');
+    }
+  };
+}
+
+document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+checkSession();
+</script>
+</body>
+</html>
