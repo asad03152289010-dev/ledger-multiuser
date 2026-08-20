@@ -29,10 +29,22 @@ module.exports = async (req, res) => {
     return res.status(401).json({ error: 'unauthorized' });
   }
 
+  const pub = (process.env.VAPID_PUBLIC_KEY || '').trim();
+  const priv = (process.env.VAPID_PRIVATE_KEY || '').trim();
+
+  if (req.query.debug) {
+    return res.status(200).json({
+      publicKeyLength: pub.length,
+      publicKeyPreview: pub.slice(0, 6) + '...' + pub.slice(-6),
+      privateKeyLength: priv.length,
+      privateKeyPreview: priv.slice(0, 4) + '...' + priv.slice(-4)
+    });
+  }
+
   webpush.setVapidDetails(
     'mailto:you@example.com',
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
+    pub,
+    priv
   );
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
