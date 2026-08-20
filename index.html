@@ -13,6 +13,12 @@
     --blue:#007aff; --green:#34c759; --red:#ff3b30; --orange:#ff9500; --purple:#af52de;
     --line:#e5e5ea; --line2:#f0f0f2;
   }
+  body[data-theme="dark"]{
+    --bg:#000000; --card:#1c1c1e; --text:#f2f2f7; --sub:#98989d;
+    --blue:#0a84ff; --green:#30d158; --red:#ff453a; --orange:#ff9f0a; --purple:#bf5af2;
+    --line:#38383a; --line2:#2c2c2e;
+  }
+  body{transition:background .2s,color .2s;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{margin:0;background:var(--bg);color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Helvetica,Arial,sans-serif;}
@@ -72,7 +78,23 @@
     transition:opacity .25s;pointer-events:none;backdrop-filter:blur(6px);}
   .toast.show{opacity:1;}
   .chip{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;margin-top:3px;}
-  .del-btn{background:none;border:none;color:var(--sub);font-size:16px;padding:4px 2px 4px 10px;cursor:pointer;flex-shrink:0;}
+  .avatar-circle{width:34px;height:34px;border-radius:50%;object-fit:cover;background:var(--blue);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;}
+  .switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch .slider{position:absolute;cursor:pointer;inset:0;background:var(--line);border-radius:26px;transition:.2s;}
+  .switch .slider:before{position:absolute;content:"";height:20px;width:20px;left:3px;bottom:3px;
+    background:#fff;border-radius:50%;transition:.2s;}
+  .switch input:checked + .slider{background:var(--blue);}
+  .switch input:checked + .slider:before{transform:translateX(20px);}
+  .settings-row{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--line2);}
+  .settings-row:last-child{border-bottom:none;}
+  .settings-row .label{font-size:14.5px;font-weight:500;}
+  .settings-row .sub{font-size:12px;color:var(--sub);margin-top:1px;}
+  button.danger{background:var(--red);}
+  button.secondary-btn{background:var(--card);color:var(--text);border:1px solid var(--line);}
+  .warn-chip{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:600;color:var(--orange);margin-top:2px;}
+  .del-btn{background:none;border:none;color:var(--sub);font-size:17px;padding:8px 4px 8px 10px;cursor:pointer;flex-shrink:0;min-width:32px;min-height:32px;}
   .del-btn:active{color:var(--red);}
   .dash{background:var(--card);border-radius:16px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
   .dash .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
@@ -116,7 +138,10 @@
 <div id="app">
   <div class="topbar">
     <h1>Ledger</h1>
-    <span class="signout" id="signout-btn">Sign out</span>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div id="avatar-wrap"></div>
+      <span class="signout" id="signout-btn">Sign out</span>
+    </div>
   </div>
   <p class="sub">Every rupee, tracked — log it by hand or drop in a statement.</p>
 
@@ -125,6 +150,7 @@
     <div class="seg" data-tab="statement">Statement</div>
     <div class="seg" data-tab="summary">Summary</div>
     <div class="seg" data-tab="budget">Budget</div>
+    <div class="seg" data-tab="settings">Settings</div>
   </div>
 
   <div class="panel active" id="panel-log">
@@ -159,7 +185,9 @@
         <option>Transport</option><option>Dining</option><option>Shopping</option>
         <option>Health</option><option>Entertainment</option><option>Transfers</option>
         <option>Other</option>
+        <option value="__new__">+ Add new category…</option>
       </select>
+      <input type="text" id="f-category-new" placeholder="Name this category" style="display:none;margin-top:8px;">
       <label>Note (optional)</label>
       <input type="text" id="f-note" placeholder="Anything worth remembering">
       <div class="err" id="f-err"></div>
@@ -188,12 +216,17 @@
   <div class="panel" id="panel-budget">
     <div id="budget-wrap"></div>
   </div>
+
+  <div class="panel" id="panel-settings">
+    <div id="settings-wrap"></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
 <button class="bell-btn" id="bell-btn" aria-label="Enable phone notifications" title="Enable phone notifications" style="display:none;"><i class="ti ti-bell"></i></button>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 // ===== Fill these in with your Supabase project's values =====
 const SUPABASE_URL = 'https://cfwesgjfagtyscknnchw.supabase.co';
@@ -208,6 +241,8 @@ let entries = [];
 let budgets = {overall: 0, categories: {}};
 let accounts = {};
 let pendingParsed = [];
+let profile = {avatar_url: null, theme: 'light'};
+function currentMonthKey(){ return new Date().toISOString().slice(0,7); }
 const KNOWN_BANKS = ['Alfalah Bank Limited','UBL Bank Limited','Easy Pesa Bank Limited','Sada Pay Bank'];
 
 const CAT_COLOR = {
@@ -220,6 +255,24 @@ const CAT_ICON = {
   Dining:'ti-tools-kitchen-2', Shopping:'ti-bag', Health:'ti-heart', Entertainment:'ti-device-tv',
   Transfers:'ti-arrows-exchange', Other:'ti-dots'
 };
+
+const CUSTOM_CAT_COLORS = ['#5e7ce2','#e25e9e','#5ee2a8','#e2a05e','#9e5ee2','#e25e5e','#5ec4e2','#a8e25e'];
+function colorForCategory(cat){
+  if(CAT_COLOR[cat]) return CAT_COLOR[cat];
+  let hash = 0;
+  for(let i=0;i<cat.length;i++) hash = (hash * 31 + cat.charCodeAt(i)) >>> 0;
+  return CUSTOM_CAT_COLORS[hash % CUSTOM_CAT_COLORS.length];
+}
+function iconForCategory(cat){ return CAT_ICON[cat] || 'ti-tag'; }
+function allCategories(){
+  const defaults = Object.keys(CAT_COLOR);
+  const used = [...new Set(entries.map(e=>e.category).filter(Boolean))];
+  return [...new Set([...defaults, ...used])];
+}
+function categoryOptionsHtml(selected){
+  return allCategories().map(c=>`<option ${c===selected?'selected':''}>${escapeHtml(c)}</option>`).join('')
+    + `<option value="__new__">+ Add new category…</option>`;
+}
 
 function toast(msg){
   const t = document.getElementById('toast');
@@ -271,10 +324,13 @@ document.getElementById('signout-btn').addEventListener('click', async () => {
   document.getElementById('bell-btn').style.display = 'none';
 });
 
+let currentUserEmail = '';
 async function enterApp(){
   document.getElementById('auth').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('bell-btn').style.display = 'flex';
+  const { data: userData } = await sb.auth.getUser();
+  currentUserEmail = userData?.user?.email || '';
   await loadAll();
   setupPushNotifications();
 }
@@ -287,10 +343,11 @@ async function checkSession(){
 
 // ===================== DATA (Supabase) =====================
 async function loadAll(){
-  const [{data: e}, {data: b}, {data: a}] = await Promise.all([
+  const [{data: e}, {data: b}, {data: a}, {data: p}] = await Promise.all([
     sb.from('entries').select('*').order('date', {ascending:false}),
-    sb.from('budgets').select('*').maybeSingle(),
-    sb.from('accounts').select('*')
+    sb.from('budgets').select('*').eq('month_key', currentMonthKey()).maybeSingle(),
+    sb.from('accounts').select('*'),
+    sb.from('profiles').select('*').maybeSingle()
   ]);
   entries = (e || []).map(row => ({
     id: row.id, date: row.date, amount: Number(row.amount), source: row.source,
@@ -299,7 +356,15 @@ async function loadAll(){
   budgets = b ? { overall: Number(b.overall)||0, categories: b.categories || {} } : { overall: 0, categories: {} };
   accounts = {};
   (a || []).forEach(row => { accounts[row.name] = Number(row.balance); });
-  renderLog(); renderSummary(); renderBudget(); renderDashboard();
+  profile = p ? { avatar_url: p.avatar_url, theme: p.theme || 'light' } : { avatar_url: null, theme: 'light' };
+  applyTheme(profile.theme);
+  renderLog(); renderSummary(); renderBudget(); renderDashboard(); renderSettings(); renderAvatar();
+}
+
+async function loadBudgetForMonth(monthKey){
+  const { data: userData } = await sb.auth.getUser();
+  const { data: b } = await sb.from('budgets').select('*').eq('user_id', userData.user.id).eq('month_key', monthKey).maybeSingle();
+  return b ? { overall: Number(b.overall)||0, categories: b.categories || {} } : { overall: 0, categories: {} };
 }
 
 async function addEntry(entry){
@@ -309,6 +374,7 @@ async function addEntry(entry){
   return true;
 }
 async function deleteEntry(id){
+  if(!confirm('Delete this entry? This can\'t be undone.')) return;
   await sb.from('entries').delete().eq('id', id);
   entries = entries.filter(e => e.id !== id);
   renderLog(); renderSummary(); renderBudget(); renderDashboard();
@@ -316,7 +382,7 @@ async function deleteEntry(id){
 }
 async function saveBudgetsToDb(){
   const { data: userData } = await sb.auth.getUser();
-  await sb.from('budgets').upsert({ user_id: userData.user.id, overall: budgets.overall, categories: budgets.categories });
+  await sb.from('budgets').upsert({ user_id: userData.user.id, month_key: currentMonthKey(), overall: budgets.overall, categories: budgets.categories });
 }
 async function saveAccountToDb(name, balance){
   const { data: userData } = await sb.auth.getUser();
@@ -324,6 +390,13 @@ async function saveAccountToDb(name, balance){
 }
 
 // ===================== RENDER: LOG =====================
+function categoryAverage(category, excludeId){
+  const spendEntries = entries.filter(e => e.category === category && e.amount < 0 && e.id !== excludeId);
+  if(spendEntries.length < 3) return null;
+  const total = spendEntries.reduce((s,e)=>s+Math.abs(e.amount),0);
+  return total / spendEntries.length;
+}
+
 function renderLog(){
   const wrap = document.getElementById('log-list');
   if(entries.length === 0){
@@ -331,19 +404,23 @@ function renderLog(){
     return;
   }
   const sorted = [...entries].sort((a,b)=> b.date.localeCompare(a.date));
-  wrap.innerHTML = sorted.map(e => `
+  wrap.innerHTML = sorted.map(e => {
+    const avg = e.amount < 0 ? categoryAverage(e.category, e.id) : null;
+    const unusual = avg !== null && Math.abs(e.amount) > avg * 2.5;
+    return `
     <div class="row">
       <div class="row-left">
-        <div class="icon-badge" style="background:${CAT_COLOR[e.category]||'#8e8e93'}"><i class="ti ${CAT_ICON[e.category]||'ti-dots'}"></i></div>
+        <div class="icon-badge" style="background:${colorForCategory(e.category)}"><i class="ti ${iconForCategory(e.category)}"></i></div>
         <div class="row-text">
           <div class="payee">${escapeHtml(e.payee || 'Unlabeled')}</div>
           <div class="meta">${e.date} · ${escapeHtml(e.source || '—')}</div>
+          ${unusual ? `<div class="warn-chip"><i class="ti ti-alert-triangle" style="font-size:11px;"></i>Higher than usual for ${escapeHtml(e.category)}</div>` : ''}
         </div>
       </div>
       <div class="amt ${e.amount<0?'neg':'pos'}">${e.amount<0?'-':'+'}${fmt(e.amount)}</div>
       <button class="del-btn" data-id="${e.id}" aria-label="Delete entry"><i class="ti ti-trash"></i></button>
     </div>
-  `).join('');
+  `;}).join('');
   wrap.querySelectorAll('.del-btn').forEach(btn => {
     btn.addEventListener('click', () => deleteEntry(btn.dataset.id));
   });
@@ -352,6 +429,9 @@ function renderLog(){
 document.getElementById('f-source').addEventListener('change', e => {
   document.getElementById('f-source-other').style.display = e.target.value === '__other__' ? 'block' : 'none';
 });
+document.getElementById('f-category').addEventListener('change', e => {
+  document.getElementById('f-category-new').style.display = e.target.value === '__new__' ? 'block' : 'none';
+});
 
 document.getElementById('f-save').addEventListener('click', async () => {
   const date = document.getElementById('f-date').value;
@@ -359,12 +439,13 @@ document.getElementById('f-save').addEventListener('click', async () => {
   let source = document.getElementById('f-source').value;
   if(source === '__other__') source = document.getElementById('f-source-other').value.trim();
   const payee = document.getElementById('f-payee').value.trim();
-  const category = document.getElementById('f-category').value;
+  let category = document.getElementById('f-category').value;
+  if(category === '__new__') category = document.getElementById('f-category-new').value.trim();
   const note = document.getElementById('f-note').value.trim();
   const err = document.getElementById('f-err');
 
-  if(!date || isNaN(amountRaw) || !source || !payee){
-    err.textContent = 'Fill in date, amount, account and payee first.';
+  if(!date || isNaN(amountRaw) || !source || !payee || !category){
+    err.textContent = 'Fill in date, amount, account, payee and category first.';
     err.style.display = 'block';
     return;
   }
@@ -375,6 +456,9 @@ document.getElementById('f-save').addEventListener('click', async () => {
   if(ok){
     await loadAll();
     ['f-amount','f-payee','f-note'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('f-category-new').value = '';
+    document.getElementById('f-category-new').style.display = 'none';
+    document.getElementById('f-category').value = 'Groceries';
     toast('Entry saved');
   }
 });
@@ -387,6 +471,7 @@ document.querySelectorAll('.seg').forEach(tab => {
     document.getElementById('panel-'+tab.dataset.tab).classList.add('active');
     if(tab.dataset.tab === 'summary') renderSummary();
     if(tab.dataset.tab === 'budget') renderBudget();
+    if(tab.dataset.tab === 'settings') renderSettings();
   });
 });
 
@@ -455,7 +540,7 @@ function parseStatementLines(lines){
 function renderPreview(){
   const wrap = document.getElementById('preview-wrap');
   if(pendingParsed.length === 0){ wrap.innerHTML=''; return; }
-  const cats = Object.keys(CAT_COLOR);
+  const cats = allCategories();
   wrap.innerHTML = `
     <div class="card">
       <h3>Review</h3>
@@ -548,7 +633,7 @@ function renderSummary(){
   const catRows = Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
     <div class="bar-row">
       <div class="top"><span>${escapeHtml(cat)}</span><span class="amt">${fmt(amt)}</span></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(amt/maxCat*100).toFixed(0)}%;background:${CAT_COLOR[cat]||'#8e8e93'}"></div></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(amt/maxCat*100).toFixed(0)}%;background:${colorForCategory(cat)}"></div></div>
     </div>`).join('');
   const sourceRows = Object.entries(bySource).sort((a,b)=>b[1]-a[1]).map(([src,amt])=>`
     <tr><td>${escapeHtml(src)}</td><td style="text-align:right" class="amt">${fmt(amt)}</td></tr>`).join('');
@@ -573,7 +658,7 @@ function renderSummary(){
 
 function renderBudget(){
   const wrap = document.getElementById('budget-wrap');
-  const cats = Object.keys(CAT_COLOR);
+  const cats = allCategories();
   const now = new Date();
   const thisMonthKey = now.toLocaleString('en-US',{month:'short',year:'numeric'});
   const spentByCat = {};
@@ -597,10 +682,13 @@ function renderBudget(){
     return `
       <div class="bar-row">
         <div class="top">
-          <span><i class="ti ${CAT_ICON[cat]}" style="margin-right:6px;color:${CAT_COLOR[cat]}"></i>${cat}</span>
-          <span class="amt">${fmt(spent)} ${goal>0 ? '/ '+fmt(goal) : ''}</span>
+          <span><i class="ti ${iconForCategory(cat)}" style="margin-right:6px;color:${colorForCategory(cat)}"></i>${escapeHtml(cat)}</span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span class="amt">${fmt(spent)} ${goal>0 ? '/ '+fmt(goal) : ''}</span>
+            ${goal>0 ? `<button class="del-btn cat-budget-clear" data-cat="${escapeHtml(cat)}" aria-label="Clear limit for ${escapeHtml(cat)}"><i class="ti ti-x"></i></button>` : ''}
+          </span>
         </div>
-        <div class="bar-track"><div class="bar-fill" style="width:${goal>0?pct:0}%;background:${over?'#ff3b30':CAT_COLOR[cat]}"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${goal>0?pct:0}%;background:${over?'#ff3b30':colorForCategory(cat)}"></div></div>
         ${over ? `<div class="chip" style="background:#ffebe9;color:#ff3b30">Over budget</div>` : ''}
       </div>`;
   }).join('');
@@ -610,7 +698,10 @@ function renderBudget(){
       <h3>This month's overall budget</h3>
       <label style="margin-top:0">Total limit for ${thisMonthKey} (PKR)</label>
       <input type="number" id="ob-amount" placeholder="e.g. 80000" value="${overall || ''}">
-      <button class="primary" id="ob-save">Save overall budget</button>
+      <div class="row2">
+        <button class="primary" id="ob-save">Save overall budget</button>
+        ${overall > 0 ? `<button class="primary" id="ob-clear" style="background:var(--red);">Clear budget</button>` : ''}
+      </div>
       ${overall > 0 ? `
         <div style="margin-top:16px;">
           <div class="top" style="display:flex;justify-content:space-between;font-size:13.5px;">
@@ -626,7 +717,8 @@ function renderBudget(){
       <div class="row2">
         <div>
           <label style="margin-top:0">Category</label>
-          <select id="b-cat">${cats.map(c=>`<option>${c}</option>`).join('')}</select>
+          <select id="b-cat">${categoryOptionsHtml()}</select>
+          <input type="text" id="b-cat-new" placeholder="Name this category" style="display:none;margin-top:8px;">
         </div>
         <div>
           <label style="margin-top:0">Amount (PKR)</label>
@@ -649,16 +741,61 @@ function renderBudget(){
     toast('Overall budget saved');
     renderBudget(); renderDashboard();
   });
+  const clearBtn = document.getElementById('ob-clear');
+  if(clearBtn){
+    clearBtn.addEventListener('click', async () => {
+      budgets.overall = 0;
+      await saveBudgetsToDb();
+      toast('Overall budget cleared');
+      renderBudget(); renderDashboard();
+    });
+  }
+  document.getElementById('b-cat').addEventListener('change', e => {
+    document.getElementById('b-cat-new').style.display = e.target.value === '__new__' ? 'block' : 'none';
+  });
   document.getElementById('b-save').addEventListener('click', async () => {
-    const cat = document.getElementById('b-cat').value;
+    let cat = document.getElementById('b-cat').value;
+    if(cat === '__new__') cat = document.getElementById('b-cat-new').value.trim();
     const amt = parseFloat(document.getElementById('b-amount').value);
-    if(isNaN(amt) || amt <= 0){ toast('Enter a valid amount'); return; }
+    if(!cat || isNaN(amt) || amt <= 0){ toast('Enter a category and a valid amount'); return; }
     budgets.categories = budgets.categories || {};
     budgets.categories[cat] = amt;
     await saveBudgetsToDb();
     toast('Category split saved');
     renderBudget();
   });
+  wrap.querySelectorAll('.cat-budget-clear').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const cat = btn.dataset.cat;
+      if(budgets.categories) delete budgets.categories[cat];
+      await saveBudgetsToDb();
+      toast('Category limit cleared');
+      renderBudget();
+    });
+  });
+}
+
+const BANK_COLORS = {
+  'Alfalah Bank Limited': '#a2845e', 'UBL Bank Limited': '#1f4d8c',
+  'Easy Pesa Bank Limited': '#00a651', 'Sada Pay Bank': '#5e2ce2'
+};
+function colorForAccount(name){
+  if(BANK_COLORS[name]) return BANK_COLORS[name];
+  let hash = 0;
+  for(let i=0;i<name.length;i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return CUSTOM_CAT_COLORS[hash % CUSTOM_CAT_COLORS.length];
+}
+function initialsForAccount(name){
+  const words = name.replace(/Bank Limited|Bank/gi,'').trim().split(/\s+/).filter(Boolean);
+  return (words[0]?.[0] || name[0] || '?').toUpperCase() + (words[1]?.[0] || '').toUpperCase();
+}
+
+async function deleteAccount(name){
+  const { data: userData } = await sb.auth.getUser();
+  await sb.from('accounts').delete().eq('user_id', userData.user.id).eq('name', name);
+  delete accounts[name];
+  toast('Balance cleared');
+  renderDashboard();
 }
 
 function renderDashboard(){
@@ -699,11 +836,17 @@ function renderDashboard(){
     const remainingHere = typeof bal === 'number' ? bal - spentHere : null;
     return `
       <div class="acct-row">
-        <div>
-          <div class="acct-name">${escapeHtml(name)}</div>
-          <div class="acct-sub">${typeof bal === 'number' ? 'Balance '+fmt(bal) : 'Balance not set'} · spent ${fmt(spentHere)} this month</div>
+        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+          <div class="icon-badge" style="background:${colorForAccount(name)};font-size:12px;font-weight:600;">${initialsForAccount(name)}</div>
+          <div style="min-width:0;">
+            <div class="acct-name">${escapeHtml(name)}</div>
+            <div class="acct-sub">${typeof bal === 'number' ? 'Balance '+fmt(bal) : 'Balance not set'} · spent ${fmt(spentHere)} this month</div>
+          </div>
         </div>
-        <div class="acct-amt ${remainingHere!==null && remainingHere<0 ? 'low':''}">${remainingHere!==null ? fmt(remainingHere) : '—'}</div>
+        <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
+          <div class="acct-amt ${remainingHere!==null && remainingHere<0 ? 'low':''}">${remainingHere!==null ? fmt(remainingHere) : '—'}</div>
+          ${typeof bal === 'number' ? `<button class="del-btn acct-clear-btn" data-name="${escapeHtml(name)}" aria-label="Clear balance for ${escapeHtml(name)}"><i class="ti ti-x"></i></button>` : ''}
+        </div>
       </div>`;
   }).join('');
 
@@ -744,6 +887,253 @@ function renderDashboard(){
     toast('Balance saved');
     renderDashboard();
   });
+  wrap.querySelectorAll('.acct-clear-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteAccount(btn.dataset.name));
+  });
+}
+
+// ===================== THEME =====================
+function applyTheme(theme){
+  document.body.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+}
+async function saveProfile(fields){
+  const { data: userData } = await sb.auth.getUser();
+  profile = { ...profile, ...fields };
+  await sb.from('profiles').upsert({ user_id: userData.user.id, avatar_url: profile.avatar_url, theme: profile.theme });
+}
+
+// ===================== AVATAR =====================
+function initialsForUser(){
+  const name = currentUserEmail.split('@')[0] || '?';
+  return name.slice(0,2).toUpperCase();
+}
+function renderAvatar(){
+  const wrap = document.getElementById('avatar-wrap');
+  wrap.innerHTML = profile.avatar_url
+    ? `<img class="avatar-circle" src="${profile.avatar_url}" alt="Profile photo">`
+    : `<div class="avatar-circle">${initialsForUser()}</div>`;
+}
+
+async function uploadAvatar(file){
+  const { data: userData } = await sb.auth.getUser();
+  const path = `${userData.user.id}/avatar.png`;
+  const { error: upErr } = await sb.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type });
+  if(upErr){ toast('Could not upload photo'); return; }
+  const { data: urlData } = sb.storage.from('avatars').getPublicUrl(path);
+  const url = urlData.publicUrl + '?t=' + Date.now();
+  await saveProfile({ avatar_url: url });
+  renderAvatar();
+  renderSettings();
+  toast('Profile photo updated');
+}
+
+// ===================== EXPORT =====================
+function monthLabel(monthKey){
+  const [y,m] = monthKey.split('-');
+  return new Date(Number(y), Number(m)-1, 1).toLocaleString('en-US',{month:'long', year:'numeric'});
+}
+
+function entriesForMonth(monthKey){
+  return entries.filter(e => e.date && e.date.slice(0,7) === monthKey);
+}
+
+function exportMonthCSV(monthKey){
+  const rows = entriesForMonth(monthKey);
+  if(rows.length === 0){ toast('No entries for this month'); return; }
+  let csv = 'Date,Payee,Account,Category,Amount (PKR),Note\n';
+  rows.forEach(e => {
+    csv += [e.date, e.payee, e.source, e.category, e.amount, (e.note||'').replace(/,/g,';')]
+      .map(v => `"${String(v).replace(/"/g,'""')}"`).join(',') + '\n';
+  });
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ledger-${monthKey}.csv`;
+  a.click();
+}
+
+async function exportMonthPDF(monthKey){
+  const rows = entriesForMonth(monthKey);
+  if(rows.length === 0){ toast('No entries for this month'); return; }
+  const spend = rows.filter(e=>e.amount<0);
+  const total = spend.reduce((s,e)=>s+Math.abs(e.amount),0);
+  const byCat = {};
+  spend.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + Math.abs(e.amount); });
+  const b = monthKey === currentMonthKey() ? budgets : await loadBudgetForMonth(monthKey);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  let y = 20;
+  doc.setFontSize(18); doc.text('Ledger — ' + monthLabel(monthKey), 14, y); y += 10;
+  doc.setFontSize(11);
+  doc.text(`Total spent: Rs ${Math.round(total).toLocaleString('en-PK')}`, 14, y); y += 7;
+  if(b.overall > 0){
+    doc.text(`Budget: Rs ${Math.round(b.overall).toLocaleString('en-PK')}  ·  Remaining: Rs ${Math.round(b.overall-total).toLocaleString('en-PK')}`, 14, y);
+    y += 7;
+  }
+  y += 4;
+  doc.setFontSize(13); doc.text('By category', 14, y); y += 7;
+  doc.setFontSize(10);
+  Object.entries(byCat).sort((a,b)=>b[1]-a[1]).forEach(([cat, amt]) => {
+    doc.text(`${cat}`, 14, y);
+    doc.text(`Rs ${Math.round(amt).toLocaleString('en-PK')}`, 160, y, {align:'right'});
+    y += 6;
+  });
+  y += 6;
+  doc.setFontSize(13); doc.text('All entries', 14, y); y += 7;
+  doc.setFontSize(9);
+  rows.sort((a,b)=>a.date.localeCompare(b.date)).forEach(e => {
+    if(y > 280){ doc.addPage(); y = 20; }
+    doc.text(`${e.date}  ${e.payee}  (${e.category})`, 14, y);
+    doc.text(`${e.amount<0?'-':'+'}Rs ${Math.round(Math.abs(e.amount)).toLocaleString('en-PK')}`, 195, y, {align:'right'});
+    y += 6;
+  });
+  doc.save(`ledger-${monthKey}.pdf`);
+}
+
+// ===================== RESET / NEW MONTH =====================
+async function resetThisMonth(){
+  if(!confirm(`Delete all entries for ${monthLabel(currentMonthKey())}? This can't be undone.`)) return;
+  const { data: userData } = await sb.auth.getUser();
+  const mk = currentMonthKey();
+  await sb.from('entries').delete().eq('user_id', userData.user.id).gte('date', mk+'-01').lt('date', mk+'-32');
+  await loadAll();
+  toast('This month\'s entries cleared');
+}
+
+async function resetAllData(){
+  if(!confirm('This deletes ALL your entries, accounts, and budgets permanently. Are you absolutely sure?')) return;
+  if(!confirm('Really sure? This cannot be undone.')) return;
+  const { data: userData } = await sb.auth.getUser();
+  await Promise.all([
+    sb.from('entries').delete().eq('user_id', userData.user.id),
+    sb.from('accounts').delete().eq('user_id', userData.user.id),
+    sb.from('budgets').delete().eq('user_id', userData.user.id)
+  ]);
+  await loadAll();
+  toast('All data reset');
+}
+
+function startNewMonth(){
+  toast(`New month started — set a budget for ${monthLabel(currentMonthKey())} below.`);
+  document.querySelectorAll('.seg').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelector('.seg[data-tab="budget"]').classList.add('active');
+  document.getElementById('panel-budget').classList.add('active');
+  renderBudget();
+}
+
+function pastMonthOptions(){
+  const monthsWithData = [...new Set(entries.map(e => e.date && e.date.slice(0,7)).filter(Boolean))];
+  const all = [...new Set([...monthsWithData, currentMonthKey()])].sort().reverse();
+  return all;
+}
+
+async function renderHistoryFor(monthKey){
+  const wrap = document.getElementById('history-detail');
+  const rows = entriesForMonth(monthKey);
+  const spend = rows.filter(e=>e.amount<0);
+  const total = spend.reduce((s,e)=>s+Math.abs(e.amount),0);
+  const byCat = {};
+  spend.forEach(e => { byCat[e.category] = (byCat[e.category]||0) + Math.abs(e.amount); });
+  const b = monthKey === currentMonthKey() ? budgets : await loadBudgetForMonth(monthKey);
+  const maxCat = Math.max(...Object.values(byCat), 1);
+
+  wrap.innerHTML = `
+    <div class="stat-grid" style="margin-top:14px;">
+      <div class="stat"><div class="num">${fmt(total)}</div><div class="lbl">Spent</div></div>
+      <div class="stat"><div class="num">${b.overall > 0 ? fmt(b.overall) : '—'}</div><div class="lbl">Budget</div></div>
+    </div>
+    ${Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+      <div class="bar-row">
+        <div class="top"><span>${escapeHtml(cat)}</span><span class="amt">${fmt(amt)}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(amt/maxCat*100).toFixed(0)}%;background:${colorForCategory(cat)}"></div></div>
+      </div>`).join('') || '<p class="acct-sub">No spending recorded this month.</p>'}
+  `;
+}
+
+function renderSettings(){
+  const wrap = document.getElementById('settings-wrap');
+  const months = pastMonthOptions();
+  wrap.innerHTML = `
+    <div class="card">
+      <h3>Profile</h3>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div id="settings-avatar"></div>
+        <div>
+          <div style="font-weight:500;font-size:14.5px;">${escapeHtml(currentUserEmail)}</div>
+          <label class="link" for="avatar-input" style="cursor:pointer;">Change photo</label>
+          <input type="file" id="avatar-input" accept="image/*" style="display:none;">
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Appearance</h3>
+      <div class="settings-row">
+        <div>
+          <div class="label">Dark mode</div>
+          <div class="sub">Switch between light and dark appearance</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="theme-toggle" ${profile.theme==='dark'?'checked':''}>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Reports</h3>
+      <label style="margin-top:0">Month</label>
+      <select id="export-month">${months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('')}</select>
+      <div class="row2">
+        <button class="primary secondary-btn" id="export-csv-btn">Export CSV</button>
+        <button class="primary" id="export-pdf-btn">Export PDF</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>History</h3>
+      <label style="margin-top:0">View a past month</label>
+      <select id="history-month">${months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('')}</select>
+      <div id="history-detail"></div>
+    </div>
+    <div class="card">
+      <h3>Month</h3>
+      <p class="acct-sub" style="margin-bottom:12px;">Your data is always organised by month automatically — starting a new month doesn't delete anything, it just takes you to set a fresh budget.</p>
+      <button class="primary secondary-btn" id="new-month-btn">Start new month</button>
+    </div>
+    <div class="card">
+      <h3>Reset data</h3>
+      <p class="acct-sub" style="margin-bottom:12px;">These actions can't be undone.</p>
+      <div class="row2">
+        <button class="primary danger" id="reset-month-btn">Reset this month</button>
+        <button class="primary danger" id="reset-all-btn">Reset everything</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('settings-avatar').innerHTML = profile.avatar_url
+    ? `<img class="avatar-circle" style="width:52px;height:52px;" src="${profile.avatar_url}" alt="Profile photo">`
+    : `<div class="avatar-circle" style="width:52px;height:52px;font-size:18px;">${initialsForUser()}</div>`;
+
+  document.getElementById('avatar-input').addEventListener('change', e => {
+    if(e.target.files[0]) uploadAvatar(e.target.files[0]);
+  });
+  document.getElementById('theme-toggle').addEventListener('change', async e => {
+    const theme = e.target.checked ? 'dark' : 'light';
+    applyTheme(theme);
+    await saveProfile({ theme });
+    toast(theme === 'dark' ? 'Dark mode on' : 'Light mode on');
+  });
+  document.getElementById('export-csv-btn').addEventListener('click', () => {
+    exportMonthCSV(document.getElementById('export-month').value);
+  });
+  document.getElementById('export-pdf-btn').addEventListener('click', () => {
+    exportMonthPDF(document.getElementById('export-month').value);
+  });
+  document.getElementById('history-month').addEventListener('change', e => renderHistoryFor(e.target.value));
+  renderHistoryFor(months[0]);
+  document.getElementById('new-month-btn').addEventListener('click', startNewMonth);
+  document.getElementById('reset-month-btn').addEventListener('click', resetThisMonth);
+  document.getElementById('reset-all-btn').addEventListener('click', resetAllData);
 }
 
 // ===================== PUSH NOTIFICATIONS =====================
