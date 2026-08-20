@@ -55,9 +55,10 @@ module.exports = async (req, res) => {
 
   let sent = 0, removed = 0;
   const errors = [];
+  const options = { TTL: 60, urgency: 'high' };
   for (const row of subs || []) {
     try {
-      await webpush.sendNotification(row.subscription, payload);
+      await webpush.sendNotification(row.subscription, payload, options);
       sent++;
     } catch (err) {
       if (err.statusCode === 410 || err.statusCode === 404) {
