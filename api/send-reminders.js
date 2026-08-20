@@ -43,6 +43,7 @@ module.exports = async (req, res) => {
   const payload = JSON.stringify({ title: 'Ledger reminder', body: message });
 
   let sent = 0, removed = 0;
+  const errors = [];
   for (const row of subs || []) {
     try {
       await webpush.sendNotification(row.subscription, payload);
@@ -51,9 +52,11 @@ module.exports = async (req, res) => {
       if (err.statusCode === 410 || err.statusCode === 404) {
         await supabase.from('push_subscriptions').delete().eq('id', row.id);
         removed++;
+      } else {
+        errors.push({ statusCode: err.statusCode, message: err.body || err.message });
       }
     }
   }
 
-  res.status(200).json({ ok: true, sent, removed, total: (subs || []).length });
+  res.status(200).json({ ok: true, sent, removed, total: (subs || []).length, errors });
 };
